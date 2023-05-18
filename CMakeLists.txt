@@ -1,7 +1,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 
 # Name of the project
-PROJECT(A4)
+PROJECT(FreeLookCamera)
 
 # Use glob to get the list of all source files.
 # We don't really need to include header and resource files to build, but it's

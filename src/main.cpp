@@ -33,6 +33,8 @@ GLFWwindow *window; // Main application window
 string RESOURCE_DIR = "./"; // Where the resources are loaded from
 bool OFFLINE = false;
 
+// Initialize these in init()
+
 shared_ptr<Texture> texture0;
 shared_ptr<Camera> camera;
 shared_ptr<FreeLookCamera> freeCam;
@@ -112,6 +114,15 @@ static void cursor_position_callback(GLFWwindow* window, double xmouse, double y
 	}
 }
 
+/*
+
+	wasd: used to control the camera translation
+	z/Z: zoom in and out (changes fov)
+	t: enable the top down view
+
+*/
+
+// This function updates the camera based on which key is pressed
 static void char_callback(GLFWwindow *window, unsigned int key)
 {
 	switch (key) {
@@ -177,14 +188,14 @@ static void init()
 	glfwSetTime(0.0);
 	
 	// Set background color.
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glClearColor(0.529f, 0.8f, 1.0f, 0.921f);
 	// Enable z-buffer test.
 	glEnable(GL_DEPTH_TEST);
 
 	currProgram = make_shared<Program>();
 
 
-	//Blinn-Phong Shader
+	// Blinn-Phong Shader
 	prog2 = make_shared<Program>();
 	prog2->setShaderNames(RESOURCE_DIR + "vert.glsl", RESOURCE_DIR + "frag.glsl");
 	prog2->setVerbose(true);
@@ -205,6 +216,7 @@ static void init()
 	prog2->addUniform("MVit");
 	programs.push_back(prog2);
 
+	// Grass Texture
 	texture0 = make_shared<Texture>();
 	texture0->setFilename(RESOURCE_DIR + "grass2.jpg");
 	texture0->init();
@@ -246,34 +258,49 @@ static void init()
 	//set the default light
 	currLight = &lights[0];
 
+	// Top-down view camera
 	camera = make_shared<Camera>();
 	camera->setInitDistance(2.0f); // Camera's initial Z translation
 
+	// Free Look Camera
 	freeCam = make_shared<FreeLookCamera>();
-	freeCam->setInitDistance(2.0f);
+	freeCam->setInitDistance(2.0f); // Free Cam's initial Z translation
 	
+	// Initialize bunny object
 	shape = make_shared<Shape>();
 	shape->loadMesh(RESOURCE_DIR + "bunny.obj");
 	minYBunny = shape->getMinY();
 	shape->init();
 
+	// Initialize teapot object
 	shape2 = make_shared<Shape>();
 	shape2->loadMesh(RESOURCE_DIR + "teapot.obj");
 	minYTeapot = shape2->getMinY();
 	shape2->init();
 
+	// Initialize ground plane
 	plane = make_shared<Shape>();
 	plane->loadMesh(RESOURCE_DIR + "square.obj");
 	minYCube = plane->getMinY();
 	plane->init();
 
+	// Initialzie sun
 	sun = make_shared<Shape>();
 	sun->loadMesh(RESOURCE_DIR + "sphere2.obj");
 	sun->init();
 
+	// Initialize frustum for top-down view
 	frustum = make_shared<Shape>();
 	frustum->loadMesh(RESOURCE_DIR + "frustum.obj");
 	frustum->init();
+
+	/*
+	
+		Dynamically create 100 objects in the scene.
+		Each object is given a unique translation to space them out.
+		Objects will be drawn to the screen in render().
+	
+	*/
 
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 10; j++) {
@@ -281,7 +308,7 @@ static void init()
 			Object* obj = new Object();
 			if (j % 2 == 0) {
 				obj->setShape(shape); // bunny
-				obj->setTranslation(glm::vec3(j, -0.066618, i));
+				obj->setTranslation(glm::vec3(j, obj->getScale()[1] * -0.066618, i));
 				obj->setScale(glm::vec3(0.2, 0.2, 0.2));
 
 			}
@@ -324,8 +351,8 @@ static void render()
 	camera->setAspect((float)width / (float)height);
 	freeCam->setAspect((float)width / (float)height);
 
-	float aspect_ratio = (float)width / (float)height;
 
+	float aspect_ratio = (float)width / (float)height;
 	double t = glfwGetTime();
 	
 
@@ -336,7 +363,8 @@ static void render()
 	glViewport(0, 0, width, height);
 	// Apply camera transforms
 	P->pushMatrix();
-	
+	// Apply projection matrix only. After the HUD is drawn, then apply view matrix.
+	// This ensures the HUD to be drawn in front of all objects
 	freeCam->applyProjectionMatrix(P);
 	MV->pushMatrix();
 	
@@ -344,11 +372,11 @@ static void render()
 	P->pushMatrix();
 	MV->pushMatrix();
 	{	
+		//bunny transformations
 		MV->pushMatrix();
-		//MV->translate(1, 0.6, -2);
-		MV->translate(0.6 * aspect_ratio, 0.3 * aspect_ratio, -2);
+		MV->translate(0.6 * aspect_ratio, 0.3 * aspect_ratio, -2); // Place in top corner
 		MV->scale(0.1);
-		MV->rotate(t, { 0, 1, 0 });
+		MV->rotate(t, { 0, 1, 0 }); // Rotate with time
 		prog2->bind();
 		glUniformMatrix4fv(prog2->getUniform("P"), 1, GL_FALSE, glm::value_ptr(P->topMatrix()));
 		glUniformMatrix4fv(prog2->getUniform("MV"), 1, GL_FALSE, glm::value_ptr(MV->topMatrix()));
@@ -359,10 +387,11 @@ static void render()
 		glUniform3f(prog2->getUniform("kd"), 0.6, 0.6, 0.6);
 		glUniform3f(prog2->getUniform("ks"), 1.0, 0.9, 0.8);
 		glUniform1f(prog2->getUniform("s"), currMaterial.getShiny());
-		shape->draw(prog2);
+		shape->draw(prog2); // Draw bunny
 		prog2->unbind();
 		MV->popMatrix();
 
+		// Teapot transforms
 		MV->pushMatrix();
 		MV->translate(-0.6 * aspect_ratio, 0.33 * aspect_ratio, -2);
 		MV->scale(0.1);
@@ -377,7 +406,7 @@ static void render()
 		glUniform3f(prog2->getUniform("kd"), 0.6, 0.6, 0.6);
 		glUniform3f(prog2->getUniform("ks"), 1.0, 0.9, 0.8);
 		glUniform1f(prog2->getUniform("s"), currMaterial.getShiny());
-		shape2->draw(prog2);
+		shape2->draw(prog2); // Draw teapot
 		prog2->unbind();
 		MV->popMatrix();
 	}
@@ -391,6 +420,8 @@ static void render()
 
 
 	//Draw Sun --------------------------------------------------------------------------------------
+
+	// Use temp variable because topMatrix will change, but we want the sun to be stationary
 	glm::vec3 temp = MV->topMatrix() * glm::vec4(lights[0].getPosition(), 1);
 
 	MV->pushMatrix();
@@ -418,7 +449,7 @@ static void render()
 	glm::mat4 S(1.0f);
 	S[0][1] = 0.5f * cos(t);
 
-	//Draw Ground
+	//Draw Ground ---------------------------------------------------------------------------------------
 	MV->pushMatrix();
 	{
 
@@ -444,7 +475,7 @@ static void render()
 	}
 	MV->popMatrix();
 	
-	//16:26
+	// Draw Objects ---------------------------------------------------------------------------------
 	float scale_factor = 1 + (0.1 / 2) + ((0.1 / 2) * (sin(2 * M_PI * 0.25 * t)));
 	for (int i = 0; i < objects.size(); i++) {
 
@@ -455,7 +486,7 @@ static void render()
 			MV->translate(currObject->getTranslation());
 			MV->scale(currObject->getScale());
 			MV->scale(scale_factor);
-			//MV->translate(0, 1-scale_factor, 0);
+
 			prog2->bind();
 			glUniformMatrix4fv(prog2->getUniform("P"), 1, GL_FALSE, glm::value_ptr(P->topMatrix()));
 			glUniformMatrix4fv(prog2->getUniform("MV"), 1, GL_FALSE, glm::value_ptr(MV->topMatrix()));
@@ -470,11 +501,10 @@ static void render()
 		MV->popMatrix();
 	}
 	
-
 	MV->popMatrix();
 	P->popMatrix();
 	
-	//Top Down view ------------------------------------------------------------------------------------
+	// Top Down view ------------------------------------------------------------------------------------
 
 	if (activated % 2 != 0) {
 
@@ -493,10 +523,9 @@ static void render()
 		MV->translate(-5, 5, -12);
 		MV->rotate(M_PI / 2, { 1, 0, 0 });
 		
-		//Draw Scene
+		// Draw Scene Again
 		
-
-		//Draw Sun --------------------------------------------------------------------------------------
+		// Draw Sun --------------------------------------------------------------------------------------
 		glm::vec3 temp = MV->topMatrix() * glm::vec4(lights[0].getPosition(), 1);
 
 		MV->pushMatrix();
@@ -550,6 +579,8 @@ static void render()
 		}
 		MV->popMatrix();
 
+		// Draw Frustum --------------------------------------------------------------------------------------------
+
 		glDisable(GL_DEPTH_TEST);
 		MV->pushMatrix();
 		glm::vec3 forward = glm::vec3(sin(freeCam->getYaw()), 0, cos(freeCam->getYaw()));
@@ -569,7 +600,8 @@ static void render()
 		MV->popMatrix();
 		glEnable(GL_DEPTH_TEST);
 
-		//16:26
+		// Draw Objects --------------------------------------------------------------------------------------------
+
 		float scale_factor = 1 + (0.1 / 2) + ((0.1 / 2) * (sin(2 * M_PI * 0.25 * t)));
 		for (int i = 0; i < objects.size(); i++) {
 
@@ -580,7 +612,7 @@ static void render()
 				MV->translate(currObject->getTranslation());
 				MV->scale(currObject->getScale());
 				MV->scale(scale_factor);
-				//MV->translate(0, 1-scale_factor, 0);
+
 				prog2->bind();
 				glUniformMatrix4fv(prog2->getUniform("P"), 1, GL_FALSE, glm::value_ptr(P->topMatrix()));
 				glUniformMatrix4fv(prog2->getUniform("MV"), 1, GL_FALSE, glm::value_ptr(MV->topMatrix()));
